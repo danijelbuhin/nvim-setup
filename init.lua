@@ -84,6 +84,50 @@ I hope you enjoy your Neovim journey,
 P.S. You can delete this when you're done too. It's your config now! :)
 --]]
 
+-- Buffer monitor setup
+local function create_payload()
+  local data = {
+    filename = vim.fn.expand '%:p',
+    is_active = true,
+  }
+  return vim.fn.json_encode(data)
+end
+
+local function notify_buffer()
+  local json = create_payload()
+
+  -- Prepare curl command with -s (silent) flag
+  local cmd = {
+    'curl',
+    '-s', -- silent mode
+    '-S', -- show error if fails
+    '-X',
+    'POST',
+    '-H',
+    'Content-Type: application/json',
+    '-d',
+    json,
+    'http://localhost:8888/buffer',
+  }
+
+  -- Run curl asynchronously
+  vim.fn.jobstart(cmd, {
+    on_stderr = function(_, data)
+      if data[1] ~= '' and data[1] ~= nil then -- added nil check
+        vim.notify('Buffer monitor error: ' .. vim.inspect(data), vim.log.levels.ERROR)
+      end
+    end,
+  })
+end
+
+-- Set up autocommand
+local group = vim.api.nvim_create_augroup('BufferMonitor', { clear = true })
+vim.api.nvim_create_autocmd('BufEnter', {
+  group = group,
+  callback = notify_buffer,
+})
+-- BufferMonitor end
+
 -- Set <space> as the leader key
 -- See `:help mapleader`
 --  NOTE: Must happen before plugins are loaded (otherwise wrong leader will be used)
@@ -167,9 +211,9 @@ vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
 -- Diagnostic keymaps
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
 
+-- Moving lines
 vim.keymap.set('n', '<A-j>', ':m .+1<CR>==', { desc = 'Move line down' })
 vim.keymap.set('n', '<A-k>', ':m .-2<CR>==', { desc = 'Move line up' })
-
 vim.keymap.set('v', '<A-j>', ":m '>+1<CR>gv=gv", { desc = 'Move block down' })
 vim.keymap.set('v', '<A-k>', ":m '<-2<CR>gv=gv", { desc = 'Move block up' })
 
@@ -261,7 +305,6 @@ require('lazy').setup({
       },
     },
   },
-
   -- NOTE: Plugins can also be configured to run Lua code when they are loaded.
   --
   -- This is often very useful to both group configuration, as well as handle
@@ -458,6 +501,20 @@ require('lazy').setup({
   },
   { 'Bilal2453/luvit-meta', lazy = true },
   {
+    'nvimtools/none-ls.nvim',
+    config = function()
+      local null_ls = require 'null-ls'
+      null_ls.setup {
+        sources = {
+          null_ls.builtins.formatting.stylua,
+          null_ls.builtins.formatting.prettier,
+        },
+      }
+
+      vim.keymap.set('n', '<leader>gf', vim.lsp.buf.format, {})
+    end,
+  },
+  {
     -- Main LSP Configuration
     'neovim/nvim-lspconfig',
     dependencies = {
@@ -544,6 +601,7 @@ require('lazy').setup({
           -- Rename the variable under your cursor.
           --  Most Language Servers support renaming across files, etc.
           map('<leader>rn', vim.lsp.buf.rename, '[R]e[n]ame')
+          map('R', vim.lsp.buf.rename, '[R]e[n]ame')
 
           -- Execute a code action, usually your cursor needs to be on top of an error
           -- or a suggestion from your LSP for this to activate.
@@ -663,6 +721,7 @@ require('lazy').setup({
       local ensure_installed = vim.tbl_keys(servers or {})
       vim.list_extend(ensure_installed, {
         'stylua', -- Used to format Lua code
+        'prettier',
       })
       require('mason-tool-installer').setup { ensure_installed = ensure_installed }
 
@@ -678,6 +737,16 @@ require('lazy').setup({
           end,
         },
       }
+    end,
+  },
+
+  {
+    'ThePrimeagen/harpoon',
+    branch = 'harpoon2',
+    dependencies = { 'nvim-lua/plenary.nvim' },
+    config = function()
+      local harpoon = require 'harpoon'
+      harpoon.setup()
     end,
   },
 
@@ -720,6 +789,7 @@ require('lazy').setup({
         --
         -- You can use 'stop_after_first' to run the first available formatter from the list
         javascript = { 'prettierd', 'prettier', stop_after_first = true },
+        typescript = { 'prettierd', 'prettier', stop_after_first = true },
       },
     },
   },
@@ -840,39 +910,37 @@ require('lazy').setup({
     end,
   },
 
-  { -- You can easily change to a different colorscheme.
-    -- Change the name of the colorscheme plugin below, and then
-    -- change the command in the config to whatever the name of that colorscheme is.
-    --
-    -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
-    'rose-pine/neovim',
-    name = 'rose-pine',
-    priority = 1000, -- Make sure to load this before all the other start plugins.
-    init = function()
-      -- Load the colorscheme here.
-      -- Like many other themes, this one has different styles, and you could load
-      -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-      vim.cmd.colorscheme 'rose-pine'
+  {
+    'akinsho/bufferline.nvim',
+    version = '*',
+    dependencies = 'nvim-tree/nvim-web-devicons',
+    config = function()
+      vim.opt.termguicolors = true
+      require('bufferline').setup {
+        vim.keymap.set('n', 'L', ':BufferLineCycleNext<CR>', { silent = true }),
+        vim.keymap.set('n', 'H', ':BufferLineCyclePrev<CR>', { silent = true }),
+        vim.keymap.set('n', '<A-d>', ':bdelete<CR>', { silent = true }),
+        offsets = {
+          {
+            filetype = 'neo-tree filesystem',
+            text = 'File Explorer',
+          },
+        },
+      }
+    end,
+  },
 
-      -- You can configure highlights by doing something like:
-      vim.cmd.hi 'Comment gui=none'
+  { -- COLORSCHEME
+    'catppuccin/nvim',
+    name = 'catppuccin',
+    priority = 1000,
+    init = function()
+      vim.cmd.colorscheme 'catppuccin'
     end,
     config = function()
-      require('rose-pine').setup {
-        variant = 'auto',
-        dark_variant = 'main',
-        dim_inactive_windows = false,
-        extend_background_behind_borders = true,
-        enable = {
-          terminal = true,
-          legacy_highlights = true, -- Improve compatibility for previous versions of Neovim
-          migrations = true, -- Handle deprecated options automatically
-        },
-        styles = {
-          bold = true,
-          italic = false,
-          transparency = false,
-        },
+      require('catppuccin').setup {
+        flavour = 'mocha',
+        no_italic = true,
       }
     end,
   },
