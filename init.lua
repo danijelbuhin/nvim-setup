@@ -84,50 +84,6 @@ I hope you enjoy your Neovim journey,
 P.S. You can delete this when you're done too. It's your config now! :)
 --]]
 
--- Buffer monitor setup
-local function create_payload()
-  local data = {
-    filename = vim.fn.expand '%:p',
-    is_active = true,
-  }
-  return vim.fn.json_encode(data)
-end
-
-local function notify_buffer()
-  local json = create_payload()
-
-  -- Prepare curl command with -s (silent) flag
-  local cmd = {
-    'curl',
-    '-s', -- silent mode
-    '-S', -- show error if fails
-    '-X',
-    'POST',
-    '-H',
-    'Content-Type: application/json',
-    '-d',
-    json,
-    'http://localhost:8888/buffer',
-  }
-
-  -- Run curl asynchronously
-  vim.fn.jobstart(cmd, {
-    on_stderr = function(_, data)
-      if data[1] ~= '' and data[1] ~= nil then -- added nil check
-        vim.notify('Buffer monitor error: ' .. vim.inspect(data), vim.log.levels.ERROR)
-      end
-    end,
-  })
-end
-
--- Set up autocommand
-local group = vim.api.nvim_create_augroup('BufferMonitor', { clear = true })
-vim.api.nvim_create_autocmd('BufEnter', {
-  group = group,
-  callback = notify_buffer,
-})
--- BufferMonitor end
-
 -- Set <space> as the leader key
 -- See `:help mapleader`
 --  NOTE: Must happen before plugins are loaded (otherwise wrong leader will be used)
@@ -941,9 +897,42 @@ require('lazy').setup({
       require('catppuccin').setup {
         flavour = 'mocha',
         no_italic = true,
+        term_colors = false,
       }
     end,
   },
+  -- {
+  --   'ellisonleao/gruvbox.nvim',
+  --   priority = 1000,
+  --   name = 'gruvbox',
+  --   init = function()
+  --     vim.cmd.colorscheme 'gruvbox'
+  --   end,
+  --   config = function()
+  --     require('gruvbox').setup {
+  --       contrast = 'hard',
+  --       italic = {
+  --         strings = false,
+  --         emphasis = false,
+  --         comments = false,
+  --         operators = false,
+  --         folds = false,
+  --       },
+  --     }
+  --   end,
+  -- },
+  -- {
+  --   'twenty9-labs/neotone.nvim',
+  --   config = function()
+  --     require('neotone').setup {
+  --       mode = 'system',
+  --       themes = {
+  --         dark = 'catppuccin',
+  --         light = 'gruvbox',
+  --       },
+  --     }
+  --   end,
+  -- },
 
   -- Highlight todo, notes, etc in comments
   { 'folke/todo-comments.nvim', event = 'VimEnter', dependencies = { 'nvim-lua/plenary.nvim' }, opts = { signs = false } },
